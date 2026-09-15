@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diet Tracker Pro & Analis AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { min-width: 250px; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); opacity: 0; transform: translateX(100%); transition: all 0.3s ease-in-out; }
+        .toast.show { opacity: 1; transform: translateX(0); }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
+        .markdown-body strong { font-weight: 600; color: #1e293b; }
+        .markdown-body p { margin-bottom: 0.75rem; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <div id="global-loader" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center transition-opacity duration-300">
+        <i class="fa-solid fa-circle-notch fa-spin text-teal-600 text-5xl mb-4"></i>
+        <p class="text-slate-600 font-medium">Memulai sistem...</p>
+    </div>
+
+    <header class="bg-gradient-to-r from-teal-700 to-emerald-600 text-white shadow-lg pt-10 pb-16 px-4 text-center">
+        <div class="max-w-5xl mx-auto relative flex justify-between items-start">
+            <div class="text-left">
+                <h1 class="text-2xl md:text-4xl font-bold mb-1"><i class="fa-solid fa-leaf mr-2 text-teal-200"></i> DietTracker Pro</h1>
+                <p class="text-teal-100 text-xs md:text-sm">Pelacak Defisit Kalori & Analisis Ilmiah Berbasis AI</p>
+            </div>
+            <div id="user-menu" class="hidden text-right">
+                <div class="text-xs bg-black/20 px-3 py-1.5 rounded-lg mb-2 backdrop-blur-sm shadow-inner font-medium tracking-wide" id="user-email-badge">user@email.com</div>
+                <button id="btn-logout" class="text-xs text-teal-100 hover:text-white transition underline"><i class="fa-solid fa-right-from-bracket mr-1"></i>Keluar</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 w-full max-w-5xl mx-auto px-4 -mt-10 relative z-10 pb-12">
+        
+        <div id="auth-section" class="bg-white rounded-2xl shadow-xl p-6 md:p-10 hidden fade-in max-w-md mx-auto border border-slate-100">
+            
+            <!-- Login Form -->
+            <div id="login-container">
+                <div class="text-center mb-8">
+                    <h2 class="text-2xl font-bold text-slate-800">Selamat Datang</h2>
+                    <p class="text-sm text-slate-500 mt-1">Masuk untuk melacak progres Anda</p>
+                </div>
+                <form id="login-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Email</label>
+                        <input type="email" id="login-email" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white transition outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">Kata Sandi</label>
+                        <input type="password" id="login-password" required class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white transition outline-none">
+                    </div>
+                    <button type="submit" id="btn-login" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl transition shadow-md shadow-teal-500/30 mt-2">
+                        Masuk
+                    </button>
+                </form>
+                <div class="mt-8 text-center text-sm text-slate-500 border-t border-slate-100 pt-6">
+                    Belum punya akun? <button id="show-register" class="text-teal-600 font-bold hover:underline transition">Daftar Sekarang</button>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-container" class="hidden">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-bold text-slate-800">Buat Profil</h2>
+                    <p class="text-sm text-slate-500 mt-1">Lacak kalori dengan pendekatan saintifik</p>
+                </div>
+                <form id="register-form" class="space-y-4">
+                    <div class="grid grid-cols-1 gap-3">
+                        <input type="email" id="reg-email" required placeholder="Alamat Email" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:bg-white transition outline-none">
+                        <input type="password" id="reg-password" required placeholder="Kata Sandi (Min. 6 Karakter)" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:bg-white transition outline-none">
+                        
+                        <div class="grid grid-cols-2 gap-3 mt-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Tanggal Lahir</label>
+                                <input type="date" id="reg-dob" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition focus:bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Jenis Kelamin</label>
+                                <select id="reg-gender" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition focus:bg-white">
+                                    <option value="male">Laki-laki</option>
+                                    <option value="female">Perempuan</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Berat Awal (kg)</label>
+                                <input type="number" id="reg-weight" step="0.1" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition focus:bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Tinggi (cm)</label>
+                                <input type="number" id="reg-height" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition focus:bg-white">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Tingkat Aktivitas (Gaya Hidup)</label>
+                            <select id="reg-activity" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500 transition focus:bg-white">
+                                <option value="1.2">Sedenter (Jarang/tidak olahraga)</option>
+                                <option value="1.375">Ringan (Olahraga 1-3 kali/minggu)</option>
+                                <option value="1.55">Sedang (Olahraga 3-5 kali/minggu)</option>
+                                <option value="1.725">Aktif (Olahraga berat setiap hari)</option>
+                            </select>
+                        </div>
+
+                        <div class="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl mt-2">
+                            <label class="block text-xs font-semibold text-indigo-800 mb-2"><i class="fa-solid fa-clock mr-1"></i> Jendela Intermittent Fasting</label>
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1">
+                                    <label class="block text-[10px] text-indigo-400 uppercase mb-1">Mulai Makan</label>
+                                    <input type="time" id="reg-if-start" required value="12:00" class="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-[10px] text-indigo-400 uppercase mb-1">Berhenti Makan</label>
+                                    <input type="time" id="reg-if-end" required value="20:00" class="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="btn-register" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition shadow-md shadow-emerald-500/30 mt-4">
+                        Daftar & Simpan Profil
+                    </button>
+                </form>
+                <div class="mt-6 text-center text-sm text-slate-500 pt-4 border-t border-slate-100">
+                    Sudah punya akun? <button id="show-login" class="text-teal-600 font-bold hover:underline transition">Masuk</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="main-dashboard" class="hidden space-y-6">
+            
+            <!-- Profile Badges -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 fade-in flex flex-wrap items-center justify-between gap-3 text-sm">
+                <div class="flex flex-wrap gap-3">
+                    <div class="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-slate-600 font-medium">
+                        <i class="fa-solid fa-cake-candles text-rose-400 mr-1.5"></i> Usia: <span id="badge-age" class="text-slate-800">--</span>
+                    </div>
+                    <div class="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-slate-600 font-medium" title="Total Daily Energy Expenditure">
+                        <i class="fa-solid fa-fire-flame-curved text-orange-400 mr-1.5"></i> TDEE: <span id="badge-tdee" class="text-slate-800">--</span> kcal
+                    </div>
+                    <div class="bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 text-indigo-700 font-medium">
+                        <i class="fa-solid fa-clock mr-1.5"></i> Jendela Makan: <span id="badge-if">--:-- sd --:--</span>
+                    </div>
+                </div>
+                <div class="bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-100 text-teal-700 font-medium text-xs">
+                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Tersimpan di Cloud
+                </div>
+            </div>
+
+            <!-- Deficit Display -->
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-xl p-8 text-white relative overflow-hidden fade-in border border-slate-700">
+                <div class="absolute -top-12 -left-12 w-40 h-40 bg-teal-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+                <div class="absolute -bottom-12 -right-12 w-40 h-40 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+                
+                <div class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+                    <div class="text-center md:text-left">
+                        <p class="text-slate-400 text-xs font-semibold tracking-widest uppercase mb-2">Defisit Kalori Hari Ini</p>
+                        <div class="flex items-end justify-center md:justify-start gap-2 mb-1">
+                            <span class="text-6xl md:text-7xl font-bold tracking-tighter" id="display-deficit">0</span>
+                            <span class="text-xl text-slate-400 mb-2 font-medium">kcal</span>
+                        </div>
+                        <p class="text-xs text-slate-400 bg-slate-800/50 px-3 py-1 rounded-full inline-block border border-slate-700">Target: Jaga angka ini tetap positif</p>
+                    </div>
+                    
+                    <div class="flex gap-4 md:gap-6">
+                        <div class="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-4 w-32 text-center shadow-inner">
+                            <div class="text-rose-400 mb-1"><i class="fa-solid fa-utensils"></i></div>
+                            <p class="text-white/60 text-[10px] uppercase font-bold tracking-wider mb-1">Dimakan</p>
+                            <p class="text-xl font-bold text-white" id="display-consumed">0</p>
+                        </div>
+                        <div class="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-4 w-32 text-center shadow-inner">
+                            <div class="text-emerald-400 mb-1"><i class="fa-solid fa-person-running"></i></div>
+                            <p class="text-white/60 text-[10px] uppercase font-bold tracking-wider mb-1">Terbakar</p>
+                            <p class="text-xl font-bold text-white" id="display-burned">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 fade-in">
+                
+                <!-- Food Input -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center"><div class="bg-rose-100 text-rose-600 p-2 rounded-lg mr-3"><i class="fa-solid fa-burger"></i></div> Log Makanan (AI)</h3>
+                    
+                    <div class="relative mb-4">
+                        <textarea id="input-food-desc" rows="3" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-400 focus:bg-white outline-none resize-none text-sm transition" placeholder="Deskripsikan makanan Anda (misal: '1 piring nasi goreng dengan telur mata sapi')"></textarea>
+                        
+                        <div class="absolute right-3 bottom-3 flex gap-2">
+                            <input type="file" id="food-image-input" accept="image/*" capture="environment" class="hidden">
+                            <button type="button" id="btn-camera" class="bg-white border border-slate-200 text-slate-600 hover:text-rose-500 hover:border-rose-200 shadow-sm w-9 h-9 rounded-full flex items-center justify-center transition" title="Ambil/Unggah Foto">
+                                <i class="fa-solid fa-camera"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="image-preview-container" class="hidden mb-4 relative w-fit group">
+                        <img id="food-image-preview" src="" class="h-24 w-24 object-cover rounded-xl border border-slate-200 shadow-sm">
+                        <button type="button" id="btn-remove-image" class="absolute -top-2 -right-2 bg-slate-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow"><i class="fa-solid fa-times"></i></button>
+                    </div>
+
+                    <button type="button" id="btn-add-food" class="w-full bg-rose-500 hover:bg-rose-600 text-white font-semibold py-2.5 rounded-xl transition shadow-md shadow-rose-500/20 flex justify-center items-center">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Estimasi Kalori Makanan
+                    </button>
+
+                    <div class="mt-6 pt-4 border-t border-slate-100 flex-1">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Makanan Hari Ini</h4>
+                        <ul id="list-food" class="space-y-2 max-h-40 overflow-y-auto pr-2"></ul>
+                    </div>
+                </div>
+
+                <!-- Activity Input -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center"><div class="bg-emerald-100 text-emerald-600 p-2 rounded-lg mr-3"><i class="fa-solid fa-dumbbell"></i></div> Log Aktivitas (AI)</h3>
+                    
+                    <div class="mb-4">
+                        <textarea id="input-activity-desc" rows="3" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:bg-white outline-none resize-none text-sm transition" placeholder="Deskripsikan olahraga/aktivitas Anda (misal: 'Angkat beban selama 45 menit dan lari santai 15 menit')"></textarea>
+                    </div>
+
+                    <button type="button" id="btn-add-activity" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl transition shadow-md shadow-emerald-500/20 flex justify-center items-center">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Hitung Kalori Terbakar
+                    </button>
+
+                    <div class="mt-6 pt-4 border-t border-slate-100 flex-1">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Aktivitas Hari Ini</h4>
+                        <ul id="list-activity" class="space-y-2 max-h-40 overflow-y-auto pr-2"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in">
+                
+                <!-- 30 Day Recap & Weight Input -->
+                <div class="lg:col-span-1 space-y-6">
+                    <!-- Recap -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 relative overflow-hidden">
+                        <div class="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full z-0"></div>
+                        <div class="relative z-10">
+                            <h3 class="font-bold text-slate-800 mb-1">Proyeksi 30 Hari</h3>
+                            <p class="text-xs text-slate-500 mb-4">Berdasarkan sains: 7700 kcal = 1kg lemak</p>
+                            
+                            <div class="flex items-baseline gap-2 mb-2">
+                                <span class="text-4xl font-bold text-blue-600" id="recap-lost-kg">0.00</span>
+                                <span class="text-sm font-medium text-slate-600">kg turun</span>
+                            </div>
+                            <p class="text-xs text-slate-500 font-medium">Total Deficit (30 hr): <span id="recap-deficit" class="text-slate-700 font-bold">0</span> kcal</p>
+                        </div>
+                    </div>
+
+                    <!-- Manual Weight -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                        <h3 class="font-bold text-slate-800 mb-4 flex items-center"><i class="fa-solid fa-scale-balanced text-indigo-500 mr-2"></i> Berat Badan Aktual</h3>
+                        <p class="text-xs text-slate-500 mb-3">Catat berat badan Anda hari ini untuk membandingkannya dengan estimasi AI.</p>
+                        <div class="flex gap-2">
+                            <input type="number" id="input-daily-weight" step="0.1" class="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-sm transition" placeholder="Contoh: 74.5">
+                            <button type="button" id="btn-save-weight" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl transition shadow-sm font-medium text-sm">Simpan</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI End of Day Analysis -->
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+                    <div class="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 flex justify-between items-center">
+                        <h3 class="font-bold text-white flex items-center"><i class="fa-solid fa-microscope mr-2"></i> Analisis Ilmiah Harian</h3>
+                        <button type="button" id="btn-generate-summary" class="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center border border-white/10">
+                            <i class="fa-solid fa-sparkles mr-2"></i> Analisis Hari Ini
+                        </button>
+                    </div>
+                    <div class="p-6 bg-slate-50/50 flex-1 overflow-y-auto">
+                        <div id="summary-content" class="text-slate-700 text-sm markdown-body leading-relaxed">
+                            <div class="text-center text-slate-400 py-8 flex flex-col items-center">
+                                <i class="fa-solid fa-dna text-3xl mb-3 text-slate-300"></i>
+                                <p class="italic max-w-sm">Klik tombol di atas pada akhir hari Anda untuk mendapatkan rincian ilmiah tentang hormon Anda (Insulin, HGH, Autophagy) berdasarkan log hari ini dan jendela puasa Anda.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 fade-in">
+                <h3 class="font-bold text-slate-800 mb-6 flex items-center"><i class="fa-solid fa-clock-rotate-left text-slate-400 mr-2"></i> Riwayat Perjalanan Diet (Permanen)</h3>
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-left text-sm text-slate-600 border-collapse whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-700 border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold">Tanggal</th>
+                                <th class="px-4 py-3 font-semibold text-right">Masuk (kcal)</th>
+                                <th class="px-4 py-3 font-semibold text-right">Keluar (kcal)</th>
+                                <th class="px-4 py-3 font-semibold text-right">Defisit</th>
+                                <th class="px-4 py-3 font-semibold text-right border-l border-slate-200 bg-slate-100" title="Estimasi berdasarkan rumus 7700 kcal = 1kg">Estimasi BB</th>
+                                <th class="px-4 py-3 font-semibold text-right bg-slate-100" title="Berat yang Anda timbang manual">BB Aktual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="divide-y divide-slate-100 bg-white">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Konfigurasi Firebase dari User
+        const firebaseConfig = {
+            apiKey: "AIzaSyDx0FvRM0l-8W8iw5kji5SiZlAENX-85Fg",
+            authDomain: "diettrackerapp-c30b0.firebaseapp.com",
+            projectId: "diettrackerapp-c30b0",
+            storageBucket: "diettrackerapp-c30b0.firebasestorage.app",
+            messagingSenderId: "656219189405",
+            appId: "1:656219189405:web:d87c8aa50eee6cf47ce474"
+        };
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'diet-tracker-pro';
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // App State
+        let currentUserUid = null;
+        let profileData = null; 
+        let allLogs = []; 
+        let base64FoodImage = null;
+        let foodImageMime = null;
+        
+        // Dapatkan tanggal lokal dengan format YYYY-MM-DD
+        function getLocalToday() {
+            const d = new Date();
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            return d.toISOString().split('T')[0];
+        }
+        const todayStr = getLocalToday();
+
+        // UI Helpers
+        window.showToast = function(message, type = 'error') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'} flex items-center shadow-lg font-medium text-sm`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'} mr-2"></i> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3500);
+        }
+
+        function setLoader(show) {
+            document.getElementById('global-loader').style.opacity = show ? '1' : '0';
+            document.getElementById('global-loader').style.pointerEvents = show ? 'all' : 'none';
+        }
+
+        // Check Custom Token 
+        async function initAuth() {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch (e) { console.error("Login token gagal", e); }
+            }
+        }
+        initAuth();
+
+        // Auth State Observer
+        onAuthStateChanged(auth, (user) => {
+            setLoader(false);
+            if (user) {
+                currentUserUid = user.uid;
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('user-menu').classList.remove('hidden');
+                document.getElementById('user-email-badge').innerText = user.email || 'User';
+                document.getElementById('main-dashboard').classList.remove('hidden');
+                listenToProfile();
+                listenToLogs();
+            } else {
+                currentUserUid = null;
+                profileData = null;
+                allLogs = [];
+                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('user-menu').classList.add('hidden');
+                document.getElementById('main-dashboard').classList.add('hidden');
+            }
+        });
+
+        // Form Toggles
+        document.getElementById('show-register').onclick = (e) => {
+            e.preventDefault();
+            document.getElementById('login-container').classList.add('hidden');
+            document.getElementById('register-container').classList.remove('hidden');
+        };
+        document.getElementById('show-login').onclick = (e) => {
+            e.preventDefault();
+            document.getElementById('register-container').classList.add('hidden');
+            document.getElementById('login-container').classList.remove('hidden');
+        };
+
+        // Login
+        document.getElementById('login-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-login');
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            try {
+                await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value);
+            } catch (err) {
+                showToast(err.message.includes('auth/') ? "Email atau kata sandi salah." : err.message);
+            } finally {
+                btn.innerHTML = origText;
+            }
+        };
+
+        document.getElementById('btn-logout').onclick = () => signOut(auth);
+
+        // Kalkulasi Umur Presisi
+        function calculateAge(dobString) {
+            const today = new Date();
+            const birthDate = new Date(dobString);
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+            return age;
+        }
+
+        // Register
+        document.getElementById('register-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-register');
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+
+            try {
+                const userCred = await createUserWithEmailAndPassword(
+                    auth, 
+                    document.getElementById('reg-email').value, 
+                    document.getElementById('reg-password').value
+                );
+                
+                const uid = userCred.user.uid;
+                const dob = document.getElementById('reg-dob').value;
+                const gender = document.getElementById('reg-gender').value;
+                const initialWeight = parseFloat(document.getElementById('reg-weight').value);
+                const height = parseFloat(document.getElementById('reg-height').value);
+                const activityMultiplier = parseFloat(document.getElementById('reg-activity').value);
+                const ifStart = document.getElementById('reg-if-start').value;
+                const ifEnd = document.getElementById('reg-if-end').value;
+
+                const age = calculateAge(dob);
+                
+                // Rumus Mifflin-St Jeor
+                let bmr = (10 * initialWeight) + (6.25 * height) - (5 * age);
+                bmr = gender === 'male' ? bmr + 5 : bmr - 161;
+                const tdee = bmr * activityMultiplier;
+                
+                const profileObj = { 
+                    dob, age, gender, initialWeight, height, 
+                    activityMultiplier, tdee, bmr, ifStart, ifEnd 
+                };
+                
+                // Simpan ke Firestore
+                await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'profile', 'current'), profileObj);
+                showToast("Akun berhasil dibuat!", "success");
+            } catch (err) {
+                console.error(err);
+                showToast("Gagal mendaftar: " + err.message);
+            } finally {
+                btn.innerHTML = origText;
+                btn.disabled = false;
+            }
+        };
+
+        let profileUnsubscribe = null;
+        let logsUnsubscribe = null;
+
+        function listenToProfile() {
+            if (!currentUserUid) return;
+            if (profileUnsubscribe) profileUnsubscribe();
+            
+            profileUnsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'users', currentUserUid, 'profile', 'current'), (docSnap) => {
+                if (docSnap.exists()) {
+                    profileData = docSnap.data();
+                    const currentAge = calculateAge(profileData.dob);
+                    if (currentAge !== profileData.age) {
+                        profileData.age = currentAge; 
+                    }
+                    
+                    document.getElementById('badge-age').innerText = profileData.age;
+                    document.getElementById('badge-tdee').innerText = Math.round(profileData.tdee);
+                    document.getElementById('badge-if').innerText = `${profileData.ifStart} sd ${profileData.ifEnd}`;
+                    updateUI();
+                }
+            }, (error) => { console.error("Profile error:", error); });
+        }
+
+        function listenToLogs() {
+            if (!currentUserUid) return;
+            if (logsUnsubscribe) logsUnsubscribe();
+            
+            const logsRef = collection(db, 'artifacts', appId, 'users', currentUserUid, 'daily_logs');
+            logsUnsubscribe = onSnapshot(logsRef, (snapshot) => {
+                allLogs = [];
+                snapshot.forEach(d => allLogs.push(d.data()));
+                allLogs.sort((a, b) => a.date.localeCompare(b.date));
+                updateUI();
+            }, (error) => { console.error("Logs error:", error); });
+        }
+
+        function updateUI() {
+            if (!profileData) return;
+            const tdee = profileData.tdee;
+            let todayLog = allLogs.find(l => l.date === todayStr) || { date: todayStr, consumed: 0, burned: 0, foodDetails: [], activityDetails: [] };
+            
+            const consumed = todayLog.consumed || 0;
+            const burned = todayLog.burned || 0;
+            const deficit = (tdee + burned) - consumed; // Rumus defisit
+
+            const dispDeficit = document.getElementById('display-deficit');
+            dispDeficit.innerText = (deficit > 0 ? "+" : "") + Math.round(deficit).toLocaleString('id-ID');
+            
+            if (deficit >= 0) {
+                dispDeficit.classList.remove('text-rose-400');
+                dispDeficit.classList.add('text-teal-300');
+            } else {
+                dispDeficit.classList.remove('text-teal-300');
+                dispDeficit.classList.add('text-rose-400');
+            }
+            
+            document.getElementById('display-consumed').innerText = Math.round(consumed).toLocaleString('id-ID');
+            document.getElementById('display-burned').innerText = Math.round(burned).toLocaleString('id-ID');
+
+            renderList('list-food', todayLog.foodDetails || [], 'text-rose-500', false);
+            renderList('list-activity', todayLog.activityDetails || [], 'text-emerald-500', true);
+
+            // Analysis content
+            if (todayLog.endOfDaySummary) {
+                document.getElementById('summary-content').innerHTML = parseMarkdown(todayLog.endOfDaySummary);
+            } else {
+                document.getElementById('summary-content').innerHTML = `
+                    <div class="text-center text-slate-400 py-8 flex flex-col items-center">
+                        <i class="fa-solid fa-dna text-3xl mb-3 text-slate-300"></i>
+                        <p class="italic max-w-sm">Klik tombol di atas pada akhir hari Anda untuk mendapatkan rincian ilmiah tentang hormon Anda (Insulin, HGH, Autophagy) berdasarkan log hari ini dan jendela puasa Anda.</p>
+                    </div>`;
+            }
+
+            // Calculations for History & Projections
+            let currentEstWeight = profileData.initialWeight;
+            const historyRows = [];
+            
+            allLogs.forEach(log => {
+                const c = log.consumed || 0;
+                const b = log.burned || 0;
+                const dayDef = (tdee + b) - c;
+                
+                // Subtract def from weight (7700 kcal = 1kg)
+                currentEstWeight -= (dayDef / 7700);
+                
+                historyRows.push({
+                    date: log.date,
+                    c: Math.round(c),
+                    b: Math.round(b),
+                    def: Math.round(dayDef),
+                    estW: currentEstWeight.toFixed(2),
+                    actW: log.manualWeight ? parseFloat(log.manualWeight).toFixed(2) : '-'
+                });
+            });
+
+            const todayDef = (tdee + burned) - consumed;
+
+            // 30 Day Recap
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const d30Str = thirtyDaysAgo.toISOString().split('T')[0];
+            
+            let def30 = 0;
+            allLogs.forEach(l => {
+                if (l.date >= d30Str) {
+                    def30 += (tdee + (l.burned||0)) - (l.consumed||0);
+                }
+            });
+            if (!allLogs.find(l => l.date === todayStr)) {
+                def30 += todayDef;
+            }
+            
+            document.getElementById('recap-deficit').innerText = Math.round(def30).toLocaleString('id-ID');
+            document.getElementById('recap-lost-kg').innerText = (def30 / 7700).toFixed(2);
+
+            // Render History Table
+            const tbody = document.getElementById('history-table-body');
+            if (historyRows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400 italic">Belum ada catatan yang tersimpan.</td></tr>`;
+            } else {
+                tbody.innerHTML = historyRows.reverse().map(r => {
+                    const defColor = r.def >= 0 ? 'text-teal-600' : 'text-rose-500';
+                    return `
+                    <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0">
+                        <td class="px-4 py-3 font-medium text-slate-700">${r.date}</td>
+                        <td class="px-4 py-3 text-right text-rose-500">${r.c}</td>
+                        <td class="px-4 py-3 text-right text-emerald-500">+${r.b}</td>
+                        <td class="px-4 py-3 text-right font-bold ${defColor}">${(r.def >= 0 ? '+' : '')}${r.def}</td>
+                        <td class="px-4 py-3 text-right font-medium text-blue-600 bg-slate-50/50 border-l border-slate-100">${r.estW}</td>
+                        <td class="px-4 py-3 text-right font-bold text-indigo-700 bg-slate-50/50">${r.actW}</td>
+                    </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        function renderList(id, arr, color, isPlus) {
+            const ul = document.getElementById(id);
+            if(arr.length === 0) {
+                ul.innerHTML = '<li class="text-slate-400 italic text-sm py-2">Belum ada entri.</li>';
+                return;
+            }
+            ul.innerHTML = [...arr].reverse().map(item => `
+                <li class="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm mb-2 fade-in">
+                    <span class="text-slate-700 flex-1 pr-2 text-sm line-clamp-2" title="${item.desc}">${item.desc}</span>
+                    <span class="${color} font-bold whitespace-nowrap text-sm bg-slate-50 px-2 py-1 rounded-lg">${isPlus?'+':''}${Math.round(item.cals)} kcal</span>
+                </li>
+            `).join('');
+        }
+
+        function parseMarkdown(text) {
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/- (.*)/g, '<li>$1</li>')
+                .replace(/\n/g, '<br>');
+            html = html.replace(/(<li>.*<\/li>(\s*<br>\s*)*)+/g, '<ul>$&</ul>');
+            return html;
+        }
+
+        async function updateDailyLog(updates) {
+            if (!currentUserUid) return;
+            await setDoc(doc(db, 'artifacts', appId, 'users', currentUserUid, 'daily_logs', todayStr), { date: todayStr, ...updates }, { merge: true });
+        }
+
+        async function callGeminiAPI(parts) {
+            const apiKey = ""; // API Key provided by Canvas Environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            try {
+                const payload = { contents: [{ role: "user", parts }] };
+                const res = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!res.ok) throw new Error('API Request Failed');
+                const result = await res.json();
+                return result.candidates?.[0]?.content?.parts?.[0]?.text;
+            } catch(e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        // Image Handling
+        document.getElementById('btn-camera').onclick = () => document.getElementById('food-image-input').click();
+        
+        document.getElementById('food-image-input').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            foodImageMime = file.type;
+            
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const base64full = ev.target.result;
+                base64FoodImage = base64full.split(',')[1];
+                document.getElementById('food-image-preview').src = base64full;
+                document.getElementById('image-preview-container').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        };
+
+        document.getElementById('btn-remove-image').onclick = () => {
+            base64FoodImage = null;
+            foodImageMime = null;
+            document.getElementById('food-image-input').value = "";
+            document.getElementById('image-preview-container').classList.add('hidden');
+        };
+
+        // Add Food (Text/Image -> Gemini)
+        document.getElementById('btn-add-food').onclick = async () => {
+            if (!currentUserUid) return;
+            const desc = document.getElementById('input-food-desc').value.trim();
+            if (!desc && !base64FoodImage) { showToast('Silakan masukkan deskripsi atau unggah foto.'); return; }
+            
+            const btn = document.getElementById('btn-add-food');
+            const origHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Menganalisis...';
+            btn.disabled = true;
+
+            const parts = [{ text: "Perkirakan total kalori untuk makanan ini. WAJIB HANYA MENGEMBALIKAN SATU ANGKA BULAT yang mewakili kcal. Jangan sertakan unit atau teks lainnya." }];
+            if (desc) parts[0].text = `Deskripsi makanan: ${desc}. ` + parts[0].text;
+            if (base64FoodImage) {
+                parts.push({ inlineData: { mimeType: foodImageMime, data: base64FoodImage } });
+            }
+
+            const textRes = await callGeminiAPI(parts);
+            btn.innerHTML = origHTML;
+            btn.disabled = false;
+
+            if (!textRes) { showToast('Analisis AI gagal. Coba lagi.'); return; }
+            const cals = parseInt(textRes.replace(/[^0-9]/g, ''));
+            if (isNaN(cals)) { showToast('AI tidak dapat menemukan angka kalori.'); return; }
+
+            const todayLog = allLogs.find(l => l.date === todayStr) || {};
+            const curFoods = todayLog.foodDetails || [];
+            const foodName = desc || "Unggahan Foto";
+
+            await updateDailyLog({ 
+                consumed: (todayLog.consumed || 0) + cals, 
+                foodDetails: [...curFoods, { desc: foodName, cals }] 
+            });
+            
+            document.getElementById('input-food-desc').value = '';
+            document.getElementById('btn-remove-image').click();
+            showToast(`Berhasil menambahkan ${cals} kcal makanan`, 'success');
+        };
+
+        // Add Activity (Text -> Gemini)
+        document.getElementById('btn-add-activity').onclick = async () => {
+            if (!currentUserUid || !profileData) return;
+            const desc = document.getElementById('input-activity-desc').value.trim();
+            if (!desc) { showToast("Silakan deskripsikan aktivitas Anda."); return; }
+            
+            const btn = document.getElementById('btn-add-activity');
+            const origHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Menghitung...';
+            btn.disabled = true;
+
+            let estWeight = profileData.initialWeight;
+            allLogs.forEach(l => { estWeight -= (((profileData.tdee + (l.burned||0)) - (l.consumed||0)) / 7700); });
+
+            const prompt = `Berat badan saya saat ini adalah ${estWeight.toFixed(1)} kg. Aktivitas yang dilakukan: "${desc}". Gunakan nilai METs standar untuk menghitung estimasi kalori yang terbakar. WAJIB HANYA MENGEMBALIKAN SATU ANGKA BULAT yang mewakili kcal yang terbakar. Jangan sertakan unit atau teks lainnya.`;
+            
+            const textRes = await callGeminiAPI([{ text: prompt }]);
+            btn.innerHTML = origHTML;
+            btn.disabled = false;
+            
+            if (!textRes) { showToast('Analisis AI gagal.'); return; }
+            const burned = parseInt(textRes.replace(/[^0-9]/g, ''));
+            if (isNaN(burned)) { showToast('AI tidak dapat menemukan angka kalori terbakar.'); return; }
+            
+            const todayLog = allLogs.find(l => l.date === todayStr) || {};
+            await updateDailyLog({ 
+                burned: (todayLog.burned || 0) + burned, 
+                activityDetails: [...(todayLog.activityDetails||[]), { desc, cals: burned }] 
+            });
+            
+            document.getElementById('input-activity-desc').value = '';
+            showToast(`Berhasil mencatat pembakaran ${burned} kcal`, 'success');
+        };
+
+        // Save Manual Weight
+        document.getElementById('btn-save-weight').onclick = async () => {
+            if (!currentUserUid) return;
+            const w = parseFloat(document.getElementById('input-daily-weight').value);
+            if (w > 0) {
+                await updateDailyLog({ manualWeight: w });
+                document.getElementById('input-daily-weight').value = '';
+                showToast(`Berat badan aktual ${w} kg tersimpan`, 'success');
+            }
+        };
+
+        // Generate End of Day Summary
+        document.getElementById('btn-generate-summary').onclick = async () => {
+            if (!currentUserUid || !profileData) return;
+            let todayLog = allLogs.find(l => l.date === todayStr);
+            if (!todayLog || (!todayLog.consumed && !todayLog.burned)) {
+                showToast("Silakan catat setidaknya satu makanan atau aktivitas hari ini."); return;
+            }
+
+            const btn = document.getElementById('btn-generate-summary');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Membuat Analisis...';
+            btn.disabled = true;
+
+            const deficit = (profileData.tdee + (todayLog.burned||0)) - (todayLog.consumed||0);
+            const foodList = (todayLog.foodDetails||[]).map(f => `${f.desc} (${f.cals}kcal)`).join(', ') || 'Puasa penuh / Tidak ada asupan';
+            const actList = (todayLog.activityDetails||[]).map(a => `${a.desc} (${a.cals}kcal)`).join(', ') || 'Sedenter / Tidak ada olahraga';
+
+            const prompt = `Saya sedang melakukan Puasa Intermiten dengan jendela makan dari jam ${profileData.ifStart} hingga ${profileData.ifEnd}.
+Makanan yang dikonsumsi hari ini: ${foodList}.
+Aktivitas hari ini: ${actList}.
+Total defisit kalori hari ini: ${deficit} kcal (Angka positif berarti sedang menurunkan berat badan).
+
+Bertindaklah sebagai ahli endokrinologi dan biologi seluler. Berdasarkan jurnal medis terbaru, berikan ringkasan ilmiah DALAM BAHASA INDONESIA tentang apa yang terjadi di dalam tubuh saya hari ini. 
+Fokus pada:
+1. Dinamika hormon (Lonjakan/penurunan Insulin, Glukagon, Hormon Pertumbuhan/HGH).
+2. Proses seluler (misal, masuk ke fase Autophagy, laju oksidasi lemak).
+3. Efek sistemik berdasarkan defisit dan jendela puasa saya.
+
+Format dengan ketat menggunakan Markdown bersih (gunakan cetak tebal dan poin-poin agar mudah dibaca). Buatlah singkat, menarik, sangat ilmiah, dan informatif (maksimal 3-4 paragraf). Jangan sertakan basa-basi atau kata sambutan.`;
+
+            const summary = await callGeminiAPI([{ text: prompt }]);
+            
+            btn.innerHTML = '<i class="fa-solid fa-sparkles mr-2"></i> Analisis Hari Ini';
+            btn.disabled = false;
+
+            if (summary) {
+                await updateDailyLog({ endOfDaySummary: summary });
+                showToast("Laporan ilmiah berhasil dibuat!", "success");
+            } else {
+                showToast("Gagal membuat laporan.");
+            }
+        };
+
+    </script>
+</body>
+</html>
