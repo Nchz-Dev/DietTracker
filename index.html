@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         // Konfigurasi Database Firebase Anda
         const firebaseConfig = {
@@ -26,19 +26,25 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // --- FUNGSI MENGHITUNG USIA PRESISI (TAHUN, BULAN, HARI) ---
+        // State Global Aplikasi
+        let currentUserData = null;
+        let dailyData = {
+            kaloriMasuk: 0,
+            kaloriKeluar: 0,
+            defisit: 0
+        };
+
+        // --- FUNGSI MENGHITUNG USIA PRESISI ---
         function hitungUsiaPresisi(tanggalLahirStr) {
             if (!tanggalLahirStr) return "--";
             const lahir = new Date(tanggalLahirStr);
             const sekarang = new Date();
-
             let tahun = sekarang.getFullYear() - lahir.getFullYear();
             let bulan = sekarang.getMonth() - lahir.getMonth();
             let hari = sekarang.getDate() - lahir.getDate();
 
             if (hari < 0) {
                 bulan--;
-                // Ambil jumlah hari di bulan sebelumnya
                 const hariDiBulanSebelumnya = new Date(sekarang.getFullYear(), sekarang.getMonth(), 0).getDate();
                 hari += hariDiBulanSebelumnya;
             }
@@ -49,23 +55,24 @@
             return `${tahun} Thn, ${bulan} Bln, ${hari} Hr`;
         }
 
-        // --- LOGIKA AUTENTIKASI & TARIK DATA PERANGKAT LAIN ---
+        // --- AUTENTIKASI & FETCH DATA ---
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 document.getElementById('auth-section').classList.add('hidden');
                 document.getElementById('dashboard-section').classList.remove('hidden');
                 
-                // PENTING: Tarik data profil dari Firestore saat login di perangkat manapun
+                // Tarik data profil
                 const userDocRef = doc(db, "users", user.uid);
                 const userDocSnap = await getDoc(userDocRef);
 
                 if (userDocSnap.exists()) {
-                    const userData = userDocSnap.data();
+                    currentUserData = userDocSnap.data();
+                    document.getElementById('display-usia').innerText = hitungUsiaPresisi(currentUserData.tanggalLahir);
+                    document.getElementById('display-tdee').innerText = `${Math.round(currentUserData.tdee)} kcal`;
+                    document.getElementById('display-jendela-makan').innerText = currentUserData.jendelaMakan || "--:-- sd --:--";
                     
-                    // Update UI dengan data dari database
-                    document.getElementById('display-usia').innerText = hitungUsiaPresisi(userData.tanggalLahir);
-                    document.getElementById('display-tdee').innerText = `${Math.round(userData.tdee)} kcal`;
-                    document.getElementById('display-jendela-makan').innerText = userData.jendelaMakan || "--:-- sd --:--";
+                    updateDashboardUI();
+                    loadHistory(user.uid);
                 }
             } else {
                 document.getElementById('auth-section').classList.remove('hidden');
@@ -74,7 +81,7 @@
             }
         });
 
-        // Event Listener Tombol Navigasi Auth
+        // Event Listener Navigasi Auth
         document.getElementById('btn-show-register').addEventListener('click', () => {
             document.getElementById('auth-section').classList.add('hidden');
             document.getElementById('register-section').classList.remove('hidden');
@@ -85,29 +92,23 @@
             document.getElementById('auth-section').classList.remove('hidden');
         });
 
-        // --- FUNGSI LOGIN ---
+        // Login
         document.getElementById('form-login').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('login-email').value;
-            const pass = document.getElementById('login-password').value;
             try {
-                await signInWithEmailAndPassword(auth, email, pass);
-                alert('Berhasil Login!');
+                await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value);
             } catch (error) {
                 alert(`Gagal login: ${error.message}`);
             }
         });
 
-        // --- FUNGSI LOGOUT ---
+        // Logout
         document.getElementById('btn-logout').addEventListener('click', async () => {
             await signOut(auth);
-            // Reset Tampilan Data
-            document.getElementById('display-usia').innerText = "--";
-            document.getElementById('display-tdee').innerText = "-- kcal";
-            document.getElementById('display-jendela-makan').innerText = "--:-- sd --:--";
+            currentUserData = null;
         });
 
-        // --- FUNGSI REGISTRASI & KALKULASI TDEE ---
+        // Registrasi & Kalkulasi Ilmiah
         document.getElementById('form-register').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('reg-email').value;
@@ -119,9 +120,8 @@
             const aktivitas = parseFloat(document.getElementById('reg-aktivitas').value);
             const jendela = document.getElementById('reg-jendela').value;
 
-            // Hitung Umur Sementara untuk BMR (dalam tahun)
             const umurTahun = new Date().getFullYear() - new Date(tglLahir).getFullYear();
-
+            
             // Rumus Mifflin-St Jeor
             let bmr = (10 * bb) + (6.25 * tb) - (5 * umurTahun);
             bmr = gender === 'pria' ? bmr + 5 : bmr - 161;
@@ -129,34 +129,121 @@
 
             try {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-                const user = userCredential.user;
-
-                // Simpan Profil ke Firestore
-                await setDoc(doc(db, "users", user.uid), {
-                    tanggalLahir: tglLahir,
-                    gender: gender,
-                    beratAwal: bb,
-                    tinggi: tb,
-                    tdee: tdee,
-                    jendelaMakan: jendela
+                await setDoc(doc(db, "users", userCredential.user.uid), {
+                    tanggalLahir: tglLahir, gender: gender, beratAwal: bb, tinggi: tb, tdee: tdee, jendelaMakan: jendela
                 });
-
-                alert('Registrasi Berhasil! Data profil tersimpan.');
-                document.getElementById('register-section').classList.add('hidden');
-                document.getElementById('dashboard-section').classList.remove('hidden');
+                alert('Registrasi Berhasil!');
             } catch (error) {
                 alert(`Gagal mendaftar: ${error.message}`);
             }
         });
+
+        // --- LOGIKA DASHBOARD & KALKULASI ---
+        function updateDashboardUI() {
+            if(!currentUserData) return;
+            dailyData.defisit = (currentUserData.tdee + dailyData.kaloriKeluar) - dailyData.kaloriMasuk;
+            
+            document.getElementById('track-masuk').innerText = dailyData.kaloriMasuk;
+            document.getElementById('track-keluar').innerText = dailyData.kaloriKeluar;
+            document.getElementById('track-defisit').innerText = Math.round(dailyData.defisit);
+            
+            const estTurun = (dailyData.defisit > 0) ? (dailyData.defisit / 7700).toFixed(3) : 0;
+            document.getElementById('track-estimasi').innerText = `${estTurun} Kg`;
+        }
+
+        // Simulasi Input Gemini AI (Makanan)
+        document.getElementById('btn-add-food').addEventListener('click', () => {
+            const input = document.getElementById('input-food').value;
+            if(!input) return alert('Ketikkan atau foto makanan Anda terlebih dahulu.');
+            
+            // Dalam implementasi nyata, di sinilah API Gemini Vision/Text dipanggil.
+            // Ini adalah simulasi hasil AI:
+            const estimatedKcal = Math.floor(Math.random() * 300) + 200; // Mock 200-500 kcal
+            dailyData.kaloriMasuk += estimatedKcal;
+            alert(`[Gemini AI] Mendeteksi: ${input}. Estimasi: ${estimatedKcal} kcal.`);
+            updateDashboardUI();
+            document.getElementById('input-food').value = '';
+        });
+
+        // Simulasi Input Gemini AI (Aktivitas)
+        document.getElementById('btn-add-activity').addEventListener('click', () => {
+            const input = document.getElementById('input-activity').value;
+            if(!input) return alert('Ketikkan aktivitas Anda.');
+            
+            // Simulasi AI menghitung METs x BB x Durasi
+            const estimatedBurn = Math.floor(Math.random() * 200) + 100; // Mock 100-300 kcal
+            dailyData.kaloriKeluar += estimatedBurn;
+            alert(`[Gemini AI] Aktivitas '${input}' membakar sekitar ${estimatedBurn} kcal berdasarkan berat badan Anda.`);
+            updateDashboardUI();
+            document.getElementById('input-activity').value = '';
+        });
+
+        // Analisis Jurnal Ilmiah Akhir Hari
+        document.getElementById('btn-selesai-hari').addEventListener('click', async () => {
+            const beratManual = document.getElementById('input-bb-manual').value;
+            if(!beratManual) return alert('Masukkan berat badan aktual hari ini sebelum mengakhiri hari.');
+            if(dailyData.kaloriMasuk === 0 && dailyData.kaloriKeluar === 0) return alert('Belum ada log hari ini.');
+
+            // Membuat teks analisis ilmiah berdasarkan data hari ini
+            let teksAnalisis = "";
+            if (dailyData.defisit > 0) {
+                teksAnalisis = `Hebat! Defisit kalori Anda adalah ${Math.round(dailyData.defisit)} kcal. Mematuhi jendela makan (${currentUserData.jendelaMakan}) menekan kadar hormon Insulin. Saat insulin rendah, tubuh Anda melepaskan Human Growth Hormone (HGH) yang memecah sel lemak sebagai energi cadangan. Selain itu, proses Autophagy (pembersihan sel kulit mati) mulai aktif.`;
+            } else {
+                teksAnalisis = `Hari ini Anda mengalami surplus kalori. Lonjakan insulin mencegah proses pemecahan lemak. Cobalah untuk memperketat jendela puasa besok agar sensitivitas insulin kembali normal.`;
+            }
+
+            document.getElementById('analisis-ilmiah').innerText = teksAnalisis;
+            document.getElementById('analisis-container').classList.remove('hidden');
+
+            // Simpan ke Firebase
+            const user = auth.currentUser;
+            if (user) {
+                await addDoc(collection(db, "daily_logs"), {
+                    userId: user.uid,
+                    tanggal: new Date().toISOString().split('T')[0],
+                    timestamp: serverTimestamp(),
+                    defisit: dailyData.defisit,
+                    beratManual: parseFloat(beratManual),
+                    estimasiTurun: dailyData.defisit / 7700
+                });
+                alert('Data hari ini berhasil disimpan ke riwayat permanen!');
+                loadHistory(user.uid);
+            }
+        });
+
+        // Load Riwayat
+        async function loadHistory(uid) {
+            const q = query(collection(db, "daily_logs"), where("userId", "==", uid), orderBy("timestamp", "desc"));
+            const querySnapshot = await getDocs(q);
+            const tbody = document.getElementById('history-table-body');
+            tbody.innerHTML = '';
+            
+            let totalDefisitBulanIni = 0;
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                totalDefisitBulanIni += data.defisit;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-2 border">${data.tanggal}</td>
+                    <td class="p-2 border text-green-600">${Math.round(data.defisit)} kcal</td>
+                    <td class="p-2 border">${data.beratManual} kg</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Update rekap bulanan
+            const estimasiTotalTurun = (totalDefisitBulanIni > 0) ? (totalDefisitBulanIni / 7700).toFixed(2) : 0;
+            document.getElementById('rekap-bulanan').innerText = `Estimasi Penurunan Bulan Ini: ${estimasiTotalTurun} Kg`;
+        }
     </script>
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans p-6">
-
+<body class="bg-gray-50 text-gray-800 font-sans p-6 pb-20">
     <div class="max-w-2xl mx-auto">
         <!-- HEADER -->
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-blue-600">Diet Tracker Pro</h1>
-            <p class="text-sm text-gray-500 mt-2">Sistem Analisis Defisit Kalori & Fasting Ilmiah</p>
+            <p class="text-sm text-gray-500 mt-2">AI & Sains Klinis Pendukung Defisit Kalori</p>
         </header>
 
         <!-- BAGIAN LOGIN -->
@@ -186,7 +273,7 @@
                         <option value="wanita">Wanita</option>
                     </select>
                     <select id="reg-aktivitas" class="p-2 border rounded">
-                        <option value="1.2">Sedentary (Jarang Olahraga)</option>
+                        <option value="1.2">Sedentary (Jarang Bergerak)</option>
                         <option value="1.375">Ringan (1-3x Seminggu)</option>
                         <option value="1.55">Sedang (3-5x Seminggu)</option>
                         <option value="1.725">Berat (Tiap Hari)</option>
@@ -205,26 +292,88 @@
             <p class="text-sm text-center mt-4">Sudah punya akun? <button id="btn-show-login" class="text-blue-600 underline">Login di sini</button></p>
         </div>
 
-        <!-- DASHBOARD (Muncul setelah Login) -->
+        <!-- DASHBOARD UTAMA -->
         <div id="dashboard-section" class="hidden space-y-6">
             <!-- Profil Info Card -->
-            <div class="bg-blue-50 p-4 rounded-xl flex flex-wrap gap-4 items-center justify-between shadow-sm">
-                <div class="bg-white px-3 py-1 rounded-full text-sm font-semibold border flex items-center gap-2">
-                    🎂 Usia: <span id="display-usia">--</span>
-                </div>
-                <div class="bg-white px-3 py-1 rounded-full text-sm font-semibold border flex items-center gap-2 text-orange-600">
-                    🔥 TDEE: <span id="display-tdee">-- kcal</span>
-                </div>
-                <div class="bg-white px-3 py-1 rounded-full text-sm font-semibold border flex items-center gap-2 text-indigo-600">
-                    🕒 Jendela Makan: <span id="display-jendela-makan">--:-- sd --:--</span>
-                </div>
-                <button id="btn-logout" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200">Logout</button>
+            <div class="bg-blue-50 p-4 rounded-xl flex flex-wrap gap-4 items-center justify-between shadow-sm border border-blue-100">
+                <div class="bg-white px-3 py-1 rounded-full text-sm font-semibold border flex items-center gap-2">🎂 Usia: <span id="display-usia">--</span></div>
+                <div class="bg-white px-3 py-1 rounded-full text-sm font-semibold border flex items-center gap-2 text-orange-600">🔥 TDEE: <span id="display-tdee">-- kcal</span></div>
+                <div class="bg-white px-3 py-1 rounded-full text-sm font-semibold border flex items-center gap-2 text-indigo-600">🕒 Jendela: <span id="display-jendela-makan">--:-- sd --:--</span></div>
+                <button id="btn-logout" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 font-bold">Logout</button>
             </div>
 
-            <!-- Di sini Anda bisa melanjutkan menyalin tag div form aktivitas, input makanan Gemini, dsb dari versi sebelumnya -->
-            <div class="text-center p-8 bg-white rounded-xl shadow-sm border border-gray-100">
-                <p class="text-gray-500">Selamat datang kembali! Data profil Anda kini ditarik otomatis dari database.</p>
-                <p class="text-xs text-gray-400 mt-2">Form input log makanan dan aktivitas siap digunakan di bawah bagian ini.</p>
+            <!-- Daily Tracker Defisit -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+                <h2 class="text-lg font-bold text-gray-700 mb-4">Pencapaian Defisit Hari Ini</h2>
+                <div class="text-5xl font-black text-green-500 mb-2" id="track-defisit">0</div>
+                <p class="text-sm text-gray-500 mb-6">Kcal Berhasil Didefisitkan</p>
+                
+                <div class="grid grid-cols-2 gap-4 border-t pt-4">
+                    <div>
+                        <p class="text-xs text-gray-400">Kalori Masuk (Makanan)</p>
+                        <p class="text-xl font-bold text-red-500" id="track-masuk">0</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Kalori Terbakar (Aktivitas)</p>
+                        <p class="text-xl font-bold text-orange-500" id="track-keluar">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Input Makanan & Aktivitas (Gemini AI) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <h3 class="font-bold text-sm mb-2 text-gray-700">🍽️ Input Makanan (AI)</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="input-food" placeholder="Ceritakan apa yang dimakan..." class="w-full p-2 border rounded text-sm">
+                        <button class="bg-gray-100 p-2 rounded hover:bg-gray-200" title="Foto Makanan (Gemini Vision)">📸</button>
+                    </div>
+                    <button id="btn-add-food" class="mt-2 w-full bg-blue-500 text-white p-2 rounded text-sm font-bold">Hitung Kalori Makanan</button>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <h3 class="font-bold text-sm mb-2 text-gray-700">🏃‍♂️ Input Aktivitas (AI)</h3>
+                    <input type="text" id="input-activity" placeholder="Cth: Angkat beban 1 jam..." class="w-full p-2 border rounded text-sm">
+                    <button id="btn-add-activity" class="mt-2 w-full bg-orange-500 text-white p-2 rounded text-sm font-bold">Hitung Kalori Terbakar</button>
+                </div>
+            </div>
+
+            <!-- Akhiri Hari & Analisis -->
+            <div class="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-center">
+                <h3 class="font-bold text-indigo-800 mb-2">Selesaikan Hari Ini</h3>
+                <div class="flex gap-2 justify-center mb-4">
+                    <input type="number" step="0.1" id="input-bb-manual" placeholder="Timbangan Pagi Ini (Kg)" class="p-2 border rounded text-sm w-48 text-center">
+                </div>
+                <p class="text-xs text-indigo-600 mb-4">Est. Penurunan dari defisit hari ini: <span id="track-estimasi" class="font-bold">0 Kg</span></p>
+                <button id="btn-selesai-hari" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold w-full md:w-auto">Simpan & Dapatkan Analisis Klinis</button>
+            </div>
+
+            <!-- Wadah Analisis Jurnal -->
+            <div id="analisis-container" class="hidden bg-green-50 p-4 rounded-xl border border-green-200">
+                <h4 class="font-bold text-green-800 text-sm mb-2">🧬 Analisis Berbasis Jurnal Sains:</h4>
+                <p id="analisis-ilmiah" class="text-sm text-green-700 italic leading-relaxed"></p>
+            </div>
+
+            <!-- Riwayat Tahunan Permanen -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-gray-700">Riwayat Catatan</h3>
+                    <span id="rekap-bulanan" class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-bold">Estimasi: -- Kg</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 text-gray-600 text-xs">
+                            <tr>
+                                <th class="p-2 border">Tanggal</th>
+                                <th class="p-2 border">Defisit</th>
+                                <th class="p-2 border">BB Aktual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <!-- Data tabel disisipkan dari Firebase -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
